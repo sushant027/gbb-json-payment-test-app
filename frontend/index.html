@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>XML Payment Test Automation Platform</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="app-header">
+    <h1>XML Payment Test Automation</h1>
+    <span class="text-muted" style="color:#ccc">GBB Test Platform</span>
+</header>
+
+<nav class="nav-tabs" id="navTabs">
+    <button class="nav-tab active" data-page="upload">Upload Test Data</button>
+    <button class="nav-tab" data-page="xml-gen">Generate XML</button>
+    <button class="nav-tab" data-page="processing">Process Files</button>
+    <button class="nav-tab" data-page="results">Test Results</button>
+    <button class="nav-tab" data-page="mapping">Scheme Mapping</button>
+</nav>
+
+<!-- ── Upload Page ──────────────────────────────────────────────────── -->
+<div class="page active" id="page-upload">
+    <div class="card">
+        <h2 class="card-title">Upload Test Data</h2>
+        <div class="form-group">
+            <label>Select Scheme</label>
+            <select id="uploadSchemeSelect">
+                <option value="">-- Select a scheme --</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Excel File (.xlsx)</label>
+            <input type="file" id="uploadFile" accept=".xlsx,.xls">
+        </div>
+        <button class="btn btn-primary" id="uploadBtn" onclick="Upload.submit()">Upload &amp; Create Test Run</button>
+        <div id="uploadResult" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Recent Test Runs</h2>
+        <div class="table-wrapper">
+            <table id="testRunsTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Scheme</th>
+                        <th>File</th>
+                        <th>Transactions</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="testRunsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── XML Generation Page ──────────────────────────────────────────── -->
+<div class="page" id="page-xml-gen">
+    <div class="card">
+        <h2 class="card-title">Generate Request XML</h2>
+        <div class="form-group">
+            <label>Select Test Run</label>
+            <select id="xmlGenRunSelect" onchange="XmlGen.loadRunDetails()">
+                <option value="">-- Select a test run --</option>
+            </select>
+        </div>
+        <div id="xmlGenRunInfo" class="hidden"></div>
+        <div class="inline-flex mt-8">
+            <button class="btn btn-primary" id="generateBtn" onclick="XmlGen.generate()" disabled>Generate Request XMLs</button>
+            <button class="btn btn-outline" id="downloadXmlBtn" onclick="XmlGen.download()" disabled>Download XMLs (ZIP)</button>
+        </div>
+        <div id="xmlGenResult" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Transaction Details</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>TC ID</th>
+                        <th>Debit Account</th>
+                        <th>Debit Amount</th>
+                        <th>Credits</th>
+                        <th>Batch Ref</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="xmlGenTxnBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Processing Page ──────────────────────────────────────────────── -->
+<div class="page" id="page-processing">
+    <div class="card">
+        <h2 class="card-title">Process Initiation / Response Files</h2>
+        <div class="form-group">
+            <label>Select Test Run</label>
+            <select id="procRunSelect" onchange="Processing.loadRunDetails()">
+                <option value="">-- Select a test run --</option>
+            </select>
+        </div>
+        <div id="procRunInfo" class="hidden"></div>
+
+        <div class="workflow-steps mt-16">
+            <div class="workflow-step" id="step-submit">
+                <span class="step-num">1</span>
+                <span>Submit to GBB</span>
+            </div>
+            <div class="workflow-step" id="step-initiation">
+                <span class="step-num">2</span>
+                <span>Process Initiation</span>
+            </div>
+            <div class="workflow-step" id="step-response">
+                <span class="step-num">3</span>
+                <span>Process Response</span>
+            </div>
+            <div class="workflow-step" id="step-validate">
+                <span class="step-num">4</span>
+                <span>Validate</span>
+            </div>
+        </div>
+
+        <div class="inline-flex mt-8">
+            <button class="btn btn-primary" onclick="Processing.submitGbb()" id="submitGbbBtn" disabled>Submit to GBB</button>
+            <button class="btn btn-primary" onclick="Processing.processInitiation()" id="procInitBtn" disabled>Search Initiation Files</button>
+            <button class="btn btn-primary" onclick="Processing.processResponse()" id="procRespBtn" disabled>Search Response Files</button>
+            <button class="btn btn-success" onclick="Processing.validate()" id="validateBtn" disabled>Run Validation</button>
+        </div>
+        <div id="procResult" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Transaction Status</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>TC ID</th>
+                        <th>Batch Ref</th>
+                        <th>Debit Status</th>
+                        <th>Init File</th>
+                        <th>Resp File</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="procTxnBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Results Page ─────────────────────────────────────────────────── -->
+<div class="page" id="page-results">
+    <div class="card">
+        <h2 class="card-title">Validation Results</h2>
+        <div class="form-group">
+            <label>Select Test Run</label>
+            <select id="resultsRunSelect" onchange="Results.loadResults()">
+                <option value="">-- Select a test run --</option>
+            </select>
+        </div>
+        <div id="resultsSummary" class="hidden"></div>
+        <div class="inline-flex mt-8">
+            <button class="btn btn-success" id="genReportBtn" onclick="Results.generateReport()" disabled>Generate XLSX Report</button>
+            <button class="btn btn-outline" id="dlReportBtn" onclick="Results.downloadReport()" disabled>Download Report</button>
+        </div>
+        <div id="resultsMsg" class="mt-8"></div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Transaction Results</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>TC ID</th>
+                        <th>Debit Account</th>
+                        <th>Debit Amount</th>
+                        <th>Expected</th>
+                        <th>Actual Status</th>
+                        <th>Init Validation</th>
+                        <th>Init Description</th>
+                        <th>Resp Validation</th>
+                        <th>Resp Description</th>
+                        <th>Overall</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsTxnBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Credit-Level Details</h2>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>TC ID</th>
+                        <th>Credit #</th>
+                        <th>Account</th>
+                        <th>Amount</th>
+                        <th>Ref</th>
+                        <th>Init Status</th>
+                        <th>Resp Status</th>
+                        <th>Validation</th>
+                    </tr>
+                </thead>
+                <tbody id="resultsCreditBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ── Mapping Page ─────────────────────────────────────────────────── -->
+<div class="page" id="page-mapping">
+    <div class="card">
+        <h2 class="card-title">Scheme Management</h2>
+        <div class="inline-flex">
+            <input type="text" id="newSchemeName" placeholder="New scheme name" style="max-width:250px">
+            <label style="margin-left:12px;display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="isResponseXmlSplit"> Split Response XML
+            </label>
+            <button class="btn btn-primary" onclick="Mapping.createScheme()">Create Scheme</button>
+        </div>
+        <div class="mt-8">
+            <label class="mb-8" style="font-weight:500">Existing Schemes</label>
+            <select id="mappingSchemeSelect" onchange="Mapping.loadScheme()">
+                <option value="">-- Select a scheme --</option>
+            </select>
+            <button class="btn btn-danger btn-sm" onclick="Mapping.deleteScheme()" style="margin-left:8px">Delete</button>
+        </div>
+    </div>
+
+    <div id="mappingWorkspace" class="hidden">
+        <!-- XML Type Tabs -->
+        <div class="card">
+            <div class="inner-tabs">
+                <button class="inner-tab active" onclick="Mapping.switchXmlType('request')">Request XML</button>
+                <button class="inner-tab" onclick="Mapping.switchXmlType('initiation')">Initiation XML</button>
+                <button class="inner-tab" onclick="Mapping.switchXmlType('response')">Response XML</button>
+                <button class="inner-tab" id="responseFailTab" onclick="Mapping.switchXmlType('response_fail')" style="display:none">Response Fail XML</button>
+            </div>
+
+            <!-- Upload Sample XML -->
+            <div class="form-group">
+                <label>Upload Sample <span id="xmlTypeLabel">Request</span> XML</label>
+                <div class="inline-flex">
+                    <input type="file" id="sampleXmlFile" accept=".xml" style="max-width:300px">
+                    <button class="btn btn-outline" onclick="Mapping.uploadSampleXml()">Parse XML</button>
+                </div>
+            </div>
+
+            <!-- Mapping Workspace -->
+            <div id="mappingArea" class="hidden">
+                <div class="mapping-container">
+                    <!-- Left Panel: Excel Columns / Internal Fields -->
+                    <div class="mapping-panel" id="leftPanel">
+                        <div class="mapping-panel-title" id="leftPanelTitle">Excel Columns</div>
+                        <div id="leftPanelItems"></div>
+                    </div>
+
+                    <!-- Right Panel: XML Tree -->
+                    <div class="mapping-panel">
+                        <div class="mapping-panel-title">XML Structure</div>
+                        <div id="xmlTreeContainer" class="xml-tree"></div>
+                    </div>
+                </div>
+
+                <!-- Mapping Configuration -->
+                <div class="mt-16">
+                    <h3 style="font-size:14px;margin-bottom:8px">Field Mapping Configuration</h3>
+
+                    <!-- Special fields -->
+                    <div id="specialFieldsArea" class="status-config mb-8">
+                        <h4>Key Fields</h4>
+                        <div class="config-row">
+                            <label>Batch Reference:</label>
+                            <select id="batchRefSelect"><option value="">-- Select --</option></select>
+                        </div>
+                        <div class="config-row">
+                            <label>Credit Reference:</label>
+                            <select id="creditRefSelect"><option value="">-- Select --</option></select>
+                        </div>
+                        <div id="statusFieldsArea" class="hidden">
+                            <div class="config-row" id="successIndicatorRow" style="display:none">
+                                <label>Success Indicator Tag:</label>
+                                <input type="text" id="successIndicatorTag" placeholder="e.g. AcceptedCreditTag">
+                            </div>
+                            <div class="config-row">
+                                <label>Debit Status Field:</label>
+                                <select id="debitStatusSelect"><option value="">-- Select --</option></select>
+                            </div>
+                            <div class="config-row">
+                                <label>Credit Status Field:</label>
+                                <select id="creditStatusSelect"><option value="">-- Select --</option></select>
+                            </div>
+                            <h5 style="margin:8px 0 4px;font-size:12px;color:#495057">Debit Status Codes</h5>
+                            <div class="config-row">
+                                <label>Debit Success:</label>
+                                <input type="text" id="debitSuccessCodes" placeholder="e.g. P00,R00 (comma-separated)">
+                            </div>
+                            <div class="config-row">
+                                <label>Debit Failure:</label>
+                                <input type="text" id="debitFailureCodes" placeholder="e.g. F01,F02">
+                            </div>
+                            <div class="config-row">
+                                <label>Debit Pending:</label>
+                                <input type="text" id="debitPendingCodes" placeholder="e.g. P01">
+                            </div>
+                            <h5 style="margin:8px 0 4px;font-size:12px;color:#495057">Credit Status Codes</h5>
+                            <div class="config-row">
+                                <label>Credit Success:</label>
+                                <input type="text" id="creditSuccessCodes" placeholder="e.g. P01,R00 (comma-separated)">
+                            </div>
+                            <div class="config-row">
+                                <label>Credit Failure:</label>
+                                <input type="text" id="creditFailureCodes" placeholder="e.g. F01,F02">
+                            </div>
+                            <div class="config-row">
+                                <label>Credit Pending:</label>
+                                <input type="text" id="creditPendingCodes" placeholder="e.g. P02">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Credit block config -->
+                    <div class="status-config mb-8">
+                        <h4>Credit Repeating Block</h4>
+                        <div class="config-row">
+                            <label>Repeating Block:</label>
+                            <select id="creditBlockSelect" onchange="Mapping.onCreditBlockSelected()">
+                                <option value="">-- Upload XML to detect --</option>
+                            </select>
+                        </div>
+                        <input type="hidden" id="creditParentPath">
+                        <input type="hidden" id="creditRepeatElement">
+                    </div>
+
+                    <!-- Filename pattern config (request only) -->
+                    <div id="filenamePatternArea" class="status-config mb-8">
+                        <h4>Filename Pattern</h4>
+                        <p style="font-size:11px;color:#6c757d;margin-bottom:6px">
+                            Generated filename = PREFIX + DATE + SEQUENCE.xml (e.g., NEFT20260324001.xml)
+                        </p>
+                        <div class="config-row">
+                            <label>Prefix:</label>
+                            <input type="text" id="filenamePrefix" placeholder="e.g. NEFT, RTGS">
+                        </div>
+                        <div class="config-row">
+                            <label>Date Format:</label>
+                            <input type="text" id="filenameDateFormat" placeholder="e.g. yyyyMMdd, ddMMyyyy">
+                        </div>
+                    </div>
+
+                    <!-- Current mappings list -->
+                    <div class="mapping-list" id="currentMappings">
+                        <h4 style="font-size:13px;margin-bottom:6px">Current Mappings</h4>
+                        <div id="mappingsList"></div>
+                    </div>
+
+                    <div class="inline-flex mt-16">
+                        <button class="btn btn-success" onclick="Mapping.saveMappingConfig()">Save Mapping Config</button>
+                    </div>
+                    <div id="mappingMsg" class="mt-8"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+<script src="js/upload.js"></script>
+<script src="js/xml_gen.js"></script>
+<script src="js/processing.js"></script>
+<script src="js/results.js"></script>
+<script src="js/mapping.js"></script>
+
+</body>
+</html>

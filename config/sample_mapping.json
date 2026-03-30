@@ -1,0 +1,151 @@
+{
+  "_description": "Sample mapping config for reference. This is NOT loaded into the database — all mappings are configured via the Mapping UI page.",
+  "_note": "This file shows the structure of a complete mapping config for the PFTS payment scheme.",
+  "_format_note": "Both 'credit_block' (legacy) and 'repeating_blocks' (new) formats are supported. The backend auto-detects which format is used. 'repeating_blocks' supports multiple repeating sections.",
+
+  "request": {
+    "root_element": "PFTS_Payment_INP",
+    "namespace": "",
+    "debit_element": "Debit_Account",
+    "batch_reference_field": "Debit_Account/@TNPFTS_PayRefId",
+    "credit_reference_field": "@Credit_Reference",
+    "fields": [
+      {"source": "excel", "excel_column": "debit_account", "xml_path": "Debit_Account/@Account_Debit"},
+      {"source": "excel", "excel_column": "debit_ifsc", "xml_path": "Debit_Account/@IFSC_CODE_DEBIT"},
+      {"source": "excel", "excel_column": "debit_amount", "xml_path": "Debit_Account/@Debit_Amount"},
+      {"source": "excel", "excel_column": "credit_count", "xml_path": "Debit_Account/@Credit_Count"},
+      {"source": "auto", "xml_path": "Debit_Account/@TNPFTS_PayRefId", "auto_generate": {"type": "alphanumeric", "prefix": "BATCH", "length": 16}},
+      {"source": "hardcoded", "xml_path": "Debit_Account/@Bank_Name", "value": "HDFC BANK"},
+      {"source": "hardcoded", "xml_path": "Debit_Account/@Pay_Method", "value": "E"},
+      {"source": "hardcoded", "xml_path": "Debit_Account/@Debit_Narration", "value": "Debit Narration for testing"},
+      {"source": "hardcoded", "xml_path": "Debit_Account/@Scheme_Code", "value": "PFTSSCHEME000000000000002"}
+    ],
+    "credit_block": {
+      "parent_path": "Debit_Account/CreditAccounts",
+      "repeat_element": "Credit_Account",
+      "fields": [
+        {"source": "excel", "excel_column": "credit_account", "xml_path": "@Account_Credit"},
+        {"source": "excel", "excel_column": "credit_ifsc", "xml_path": "@IFSC_Code_Credit"},
+        {"source": "excel", "excel_column": "credit_amount", "xml_path": "@Credit_Amount"},
+        {"source": "excel", "excel_column": "beneficiary_name", "xml_path": "@Benef_Name"},
+        {"source": "excel", "excel_column": "pay_mode", "xml_path": "@Pay_Mode"},
+        {"source": "auto", "xml_path": "@Credit_Reference", "auto_generate": {"type": "alphanumeric", "prefix": "CREDIT", "length": 10}},
+        {"source": "hardcoded", "xml_path": "@Credit_Bank_Name", "value": "STATE BANK OF INDIA"},
+        {"source": "hardcoded", "xml_path": "@Credit_Narration", "value": "Credit Narration 1"}
+      ]
+    },
+    "repeating_blocks": [
+      {
+        "name": "credits",
+        "parent_path": "Debit_Account/CreditAccounts",
+        "repeat_element": "Credit_Account",
+        "fields": [
+          {"source": "excel", "excel_column": "credit_account", "xml_path": "@Account_Credit"},
+          {"source": "excel", "excel_column": "credit_ifsc", "xml_path": "@IFSC_Code_Credit"},
+          {"source": "excel", "excel_column": "credit_amount", "xml_path": "@Credit_Amount"},
+          {"source": "excel", "excel_column": "beneficiary_name", "xml_path": "@Benef_Name"},
+          {"source": "excel", "excel_column": "pay_mode", "xml_path": "@Pay_Mode"},
+          {"source": "auto", "xml_path": "@Credit_Reference", "auto_generate": {"type": "alphanumeric", "prefix": "CREDIT", "length": 10}},
+          {"source": "hardcoded", "xml_path": "@Credit_Bank_Name", "value": "STATE BANK OF INDIA"},
+          {"source": "hardcoded", "xml_path": "@Credit_Narration", "value": "Credit Narration 1"}
+        ]
+      }
+    ]
+  },
+
+  "initiation": {
+    "root_element": "Initiated_Payment",
+    "batch_reference_field": "Debit_Account/@TNPFTS_PayRefId",
+    "credit_reference_field": "@Credit_Reference",
+    "debit_status_field": "Debit_Account/@Debit_Status_Code",
+    "credit_status_field": "@Credit_Status_Code",
+    "status_values": {
+      "success": ["P00"],
+      "pending": ["P01"],
+      "failure": ["F01", "F02"]
+    },
+    "debit_element": "Debit_Account",
+    "fields": [
+      {"xml_path": "Debit_Account/@TNPFTS_PayRefId", "map_to": "batch_reference"},
+      {"xml_path": "Debit_Account/@Account_Debit", "map_to": "debit_account"},
+      {"xml_path": "Debit_Account/@Debit_Amount", "map_to": "debit_amount"},
+      {"xml_path": "Debit_Account/@Debit_Status_Code", "map_to": "debit_status"},
+      {"xml_path": "Debit_Account/@Debit_Remarks", "map_to": "debit_remarks"}
+    ],
+    "credit_block": {
+      "parent_path": "CreditAccounts",
+      "repeat_element": "Credit_Account",
+      "fields": [
+        {"xml_path": "@Credit_Reference", "map_to": "reference"},
+        {"xml_path": "@Account_Credit", "map_to": "account"},
+        {"xml_path": "@Credit_Amount", "map_to": "amount"},
+        {"xml_path": "@Credit_Status_Code", "map_to": "status"},
+        {"xml_path": "@Credit_Remarks", "map_to": "remarks"}
+      ]
+    },
+    "repeating_blocks": [
+      {
+        "name": "credits",
+        "parent_path": "CreditAccounts",
+        "repeat_element": "Credit_Account",
+        "fields": [
+          {"xml_path": "@Credit_Reference", "map_to": "reference"},
+          {"xml_path": "@Account_Credit", "map_to": "account"},
+          {"xml_path": "@Credit_Amount", "map_to": "amount"},
+          {"xml_path": "@Credit_Status_Code", "map_to": "status"},
+          {"xml_path": "@Credit_Remarks", "map_to": "remarks"}
+        ]
+      }
+    ]
+  },
+
+  "response": {
+    "root_element": "PFTS_Payment",
+    "batch_reference_field": "Debit_Account/@TNPFTS_PayRefId",
+    "credit_reference_field": "@Credit_Reference",
+    "debit_status_field": "Debit_Account/@Debit_Status_Code",
+    "credit_status_field": "@Credit_Status_Code",
+    "status_values": {
+      "success": ["R00"],
+      "failure": ["R01", "R02"],
+      "pending": ["P01"]
+    },
+    "debit_element": "Debit_Account",
+    "fields": [
+      {"xml_path": "Debit_Account/@TNPFTS_PayRefId", "map_to": "batch_reference"},
+      {"xml_path": "Debit_Account/@Account_Debit", "map_to": "debit_account"},
+      {"xml_path": "Debit_Account/@Debit_Amount", "map_to": "debit_amount"},
+      {"xml_path": "Debit_Account/@Debit_Status_Code", "map_to": "debit_status"},
+      {"xml_path": "Debit_Account/@Debit_Remarks", "map_to": "debit_remarks"}
+    ],
+    "credit_block": {
+      "parent_path": "CreditAccounts",
+      "repeat_element": "Credit_Account",
+      "fields": [
+        {"xml_path": "@Credit_Reference", "map_to": "reference"},
+        {"xml_path": "@Account_Credit", "map_to": "account"},
+        {"xml_path": "@Credit_Amount", "map_to": "amount"},
+        {"xml_path": "@Credit_Status_Code", "map_to": "status"},
+        {"xml_path": "@Credit_Remarks", "map_to": "remarks"},
+        {"xml_path": "@Pay_Mode", "map_to": "pay_mode"},
+        {"xml_path": "@UUID", "map_to": "unique_credit_resp_id"}
+      ]
+    },
+    "repeating_blocks": [
+      {
+        "name": "credits",
+        "parent_path": "CreditAccounts",
+        "repeat_element": "Credit_Account",
+        "fields": [
+          {"xml_path": "@Credit_Reference", "map_to": "reference"},
+          {"xml_path": "@Account_Credit", "map_to": "account"},
+          {"xml_path": "@Credit_Amount", "map_to": "amount"},
+          {"xml_path": "@Credit_Status_Code", "map_to": "status"},
+          {"xml_path": "@Credit_Remarks", "map_to": "remarks"},
+          {"xml_path": "@Pay_Mode", "map_to": "pay_mode"},
+          {"xml_path": "@UUID", "map_to": "unique_credit_resp_id"}
+        ]
+      }
+    ]
+  }
+}
