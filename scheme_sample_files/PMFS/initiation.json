@@ -1,0 +1,71 @@
+{
+    "InitiatedPayments": {
+        "MessageId": "Unique Message Identifier",
+        "PaymentProduct": "CINB",
+        "Source": "Bank Code",
+        "Destination": " PFMS",
+        "BankCode": "Code of the bank",
+        "BankName": "Name of the bank",
+        "RecordsCount": "1",
+        "BatchDetails": {
+            "PFMSBatchNo": "PFMS Batch Number 1",
+            "DebitTransactions": {
+                "C5756": "CBIN0281033",
+                "C6021": "Agency Account Number 1",
+                "C5185": "2",
+                "C4063": "4000.00",
+                "Debit": [
+                    {
+                        "C2006": "PFMS Debit Transaction Id 1",
+                        "C2020": "Bank Transaction Id",
+                        "C3501": "20110815133000",
+                        "C4063": "2000.00",
+                        "C6346": "R00"
+                    },
+                    {
+                        "C2006": "PFMS Debit Transaction Id 1",
+                        "C2020": "Bank Transaction Id",
+                        "C3501": "20110815133000",
+                        "C4063": "2000.00",
+                        "C6346": "R00"
+                    }
+                ]
+            },
+            "CreditTransactions": {
+                "C5185": "2",
+                "Credit": [
+                    {
+                        "C2006": "PFMS Credit Transaction Id 1",
+                        "C5569": "CBIN0281032",
+                        "C6061": "Credit Account Number1",
+                        "UID": "UID Number1",
+                        "BankIIN": "Bank IIN Number1",
+                        "C6081": "Beneficiary Account Holder Name as per beneficiary bank record.",
+                        "C2020": "Bank Transaction Id 1/ UTR Number 1",
+                        "C3501": "20110815133000",
+                        "C4038": "2000.00",
+                        "C6346": "R01",
+                        "C3380": "20110726",
+                        "C3375": "20110726",
+                        "C3381": "20110726"
+                    },
+                    {
+                        "C2006": "PFMS Credit Transaction Id 2",
+                        "C5569": "CBIN0281032",
+                        "C6061": "Credit Account Number 2",
+                        "UID": "UID Number 2",
+                        "BankIIN": "Bank IIN Number 2",
+                        "C2020": "Bank Transaction Id 2/ UTR Number 2",
+                        "C3501": "20110815133000",
+                        "C4038": "2000.00",
+                        "C6346": "R01",
+                        "C3380": "20110726",
+                        "C3375": "20110726",
+                        "C3381": "20110726"
+                    }
+                ]
+            }
+        }
+    }
+}
+

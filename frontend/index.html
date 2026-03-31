@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XML Payment Test Automation Platform</title>
+    <title>JSON Payment Test Automation Platform</title>
     <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
 <header class="app-header">
-    <h1>XML Payment Test Automation</h1>
+    <h1>JSON Payment Test Automation</h1>
     <span class="text-muted" style="color:#ccc">GBB Test Platform</span>
 </header>
 
 <nav class="nav-tabs" id="navTabs">
     <button class="nav-tab active" data-page="upload">Upload Test Data</button>
-    <button class="nav-tab" data-page="xml-gen">Generate XML</button>
+    <button class="nav-tab" data-page="json-gen">Generate JSON</button>
     <button class="nav-tab" data-page="processing">Process Files</button>
     <button class="nav-tab" data-page="results">Test Results</button>
     <button class="nav-tab" data-page="mapping">Scheme Mapping</button>
@@ -59,22 +59,22 @@
     </div>
 </div>
 
-<!-- ── XML Generation Page ──────────────────────────────────────────── -->
-<div class="page" id="page-xml-gen">
+<!-- ── JSON Generation Page ───────────────────────────────────────── -->
+<div class="page" id="page-json-gen">
     <div class="card">
-        <h2 class="card-title">Generate Request XML</h2>
+        <h2 class="card-title">Generate Request JSON</h2>
         <div class="form-group">
             <label>Select Test Run</label>
-            <select id="xmlGenRunSelect" onchange="XmlGen.loadRunDetails()">
+            <select id="jsonGenRunSelect" onchange="JsonGen.loadRunDetails()">
                 <option value="">-- Select a test run --</option>
             </select>
         </div>
-        <div id="xmlGenRunInfo" class="hidden"></div>
+        <div id="jsonGenRunInfo" class="hidden"></div>
         <div class="inline-flex mt-8">
-            <button class="btn btn-primary" id="generateBtn" onclick="XmlGen.generate()" disabled>Generate Request XMLs</button>
-            <button class="btn btn-outline" id="downloadXmlBtn" onclick="XmlGen.download()" disabled>Download XMLs (ZIP)</button>
+            <button class="btn btn-primary" id="generateBtn" onclick="JsonGen.generate()" disabled>Generate Request JSONs</button>
+            <button class="btn btn-outline" id="downloadJsonBtn" onclick="JsonGen.download()" disabled>Download JSONs (ZIP)</button>
         </div>
-        <div id="xmlGenResult" class="mt-8"></div>
+        <div id="jsonGenResult" class="mt-8"></div>
     </div>
 
     <div class="card">
@@ -91,7 +91,7 @@
                         <th>Status</th>
                     </tr>
                 </thead>
-                <tbody id="xmlGenTxnBody"></tbody>
+                <tbody id="jsonGenTxnBody"></tbody>
             </table>
         </div>
     </div>
@@ -100,7 +100,7 @@
 <!-- ── Processing Page ──────────────────────────────────────────────── -->
 <div class="page" id="page-processing">
     <div class="card">
-        <h2 class="card-title">Process Initiation / Response Files</h2>
+        <h2 class="card-title">Process Initiation / Response</h2>
         <div class="form-group">
             <label>Select Test Run</label>
             <select id="procRunSelect" onchange="Processing.loadRunDetails()">
@@ -108,6 +108,11 @@
             </select>
         </div>
         <div id="procRunInfo" class="hidden"></div>
+
+        <div class="form-group mt-8">
+            <label>GBB Endpoint URL (optional override)</label>
+            <input type="text" id="gbbUrlInput" placeholder="http://localhost:8080/api/payments" style="max-width:400px">
+        </div>
 
         <div class="workflow-steps mt-16">
             <div class="workflow-step" id="step-submit">
@@ -129,7 +134,7 @@
         </div>
 
         <div class="inline-flex mt-8">
-            <button class="btn btn-primary" onclick="Processing.submitGbb()" id="submitGbbBtn" disabled>Submit to GBB</button>
+            <button class="btn btn-primary" onclick="Processing.submitGbb()" id="submitGbbBtn" disabled>Submit JSON to GBB</button>
             <button class="btn btn-primary" onclick="Processing.processInitiation()" id="procInitBtn" disabled>Search Initiation Files</button>
             <button class="btn btn-primary" onclick="Processing.processResponse()" id="procRespBtn" disabled>Search Response Files</button>
             <button class="btn btn-success" onclick="Processing.validate()" id="validateBtn" disabled>Run Validation</button>
@@ -227,7 +232,7 @@
         <div class="inline-flex">
             <input type="text" id="newSchemeName" placeholder="New scheme name" style="max-width:250px">
             <label style="margin-left:12px;display:flex;align-items:center;gap:4px">
-                <input type="checkbox" id="isResponseXmlSplit"> Split Response XML
+                <input type="checkbox" id="isResponseXmlSplit"> Split Response JSON
             </label>
             <button class="btn btn-primary" onclick="Mapping.createScheme()">Create Scheme</button>
         </div>
@@ -241,21 +246,21 @@
     </div>
 
     <div id="mappingWorkspace" class="hidden">
-        <!-- XML Type Tabs -->
+        <!-- JSON Type Tabs -->
         <div class="card">
             <div class="inner-tabs">
-                <button class="inner-tab active" onclick="Mapping.switchXmlType('request')">Request XML</button>
-                <button class="inner-tab" onclick="Mapping.switchXmlType('initiation')">Initiation XML</button>
-                <button class="inner-tab" onclick="Mapping.switchXmlType('response')">Response XML</button>
-                <button class="inner-tab" id="responseFailTab" onclick="Mapping.switchXmlType('response_fail')" style="display:none">Response Fail XML</button>
+                <button class="inner-tab active" onclick="Mapping.switchJsonType('request')">Request JSON</button>
+                <button class="inner-tab" onclick="Mapping.switchJsonType('initiation')">Initiation JSON</button>
+                <button class="inner-tab" onclick="Mapping.switchJsonType('response')">Response JSON</button>
+                <button class="inner-tab" id="responseFailTab" onclick="Mapping.switchJsonType('response_fail')" style="display:none">Response Fail JSON</button>
             </div>
 
-            <!-- Upload Sample XML -->
+            <!-- Upload Sample JSON -->
             <div class="form-group">
-                <label>Upload Sample <span id="xmlTypeLabel">Request</span> XML</label>
+                <label>Upload Sample <span id="jsonTypeLabel">Request</span> JSON</label>
                 <div class="inline-flex">
-                    <input type="file" id="sampleXmlFile" accept=".xml" style="max-width:300px">
-                    <button class="btn btn-outline" onclick="Mapping.uploadSampleXml()">Parse XML</button>
+                    <input type="file" id="sampleJsonFile" accept=".json" style="max-width:300px">
+                    <button class="btn btn-outline" onclick="Mapping.uploadSampleJson()">Parse JSON</button>
                 </div>
             </div>
 
@@ -268,10 +273,10 @@
                         <div id="leftPanelItems"></div>
                     </div>
 
-                    <!-- Right Panel: XML Tree -->
+                    <!-- Right Panel: JSON Tree -->
                     <div class="mapping-panel">
-                        <div class="mapping-panel-title">XML Structure</div>
-                        <div id="xmlTreeContainer" class="xml-tree"></div>
+                        <div class="mapping-panel-title">JSON Structure</div>
+                        <div id="jsonTreeContainer" class="xml-tree"></div>
                     </div>
                 </div>
 
@@ -292,8 +297,10 @@
                         </div>
                         <div id="statusFieldsArea" class="hidden">
                             <div class="config-row" id="successIndicatorRow" style="display:none">
-                                <label>Success Indicator Tag:</label>
-                                <input type="text" id="successIndicatorTag" placeholder="e.g. AcceptedCreditTag">
+                                <label>Success Indicator Path:</label>
+                                <input type="text" id="successIndicatorPath" placeholder="e.g. Status">
+                                <label style="margin-left:8px">Value:</label>
+                                <input type="text" id="successIndicatorValue" placeholder="e.g. SUCCESS (leave empty for presence check)">
                             </div>
                             <div class="config-row">
                                 <label>Debit Status Field:</label>
@@ -332,13 +339,30 @@
                         </div>
                     </div>
 
+                    <!-- Batch configuration -->
+                    <div class="status-config mb-8">
+                        <h4>Batch Configuration</h4>
+                        <div class="config-row">
+                            <label>Batch Container:</label>
+                            <select id="batchContainerSelect">
+                                <option value="">-- Auto-detect --</option>
+                            </select>
+                        </div>
+                        <div class="config-row">
+                            <label style="display:flex;align-items:center;gap:4px">
+                                <input type="checkbox" id="isMultiBatch">
+                                Supports Multi-Batch (rows with same TCID produce multiple batches in one request)
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Credit block config -->
                     <div class="status-config mb-8">
                         <h4>Credit Repeating Block</h4>
                         <div class="config-row">
                             <label>Repeating Block:</label>
                             <select id="creditBlockSelect" onchange="Mapping.onCreditBlockSelected()">
-                                <option value="">-- Upload XML to detect --</option>
+                                <option value="">-- Upload JSON to detect --</option>
                             </select>
                         </div>
                         <input type="hidden" id="creditParentPath">
@@ -349,7 +373,7 @@
                     <div id="filenamePatternArea" class="status-config mb-8">
                         <h4>Filename Pattern</h4>
                         <p style="font-size:11px;color:#6c757d;margin-bottom:6px">
-                            Generated filename = PREFIX + DATE + SEQUENCE.xml (e.g., NEFT20260324001.xml)
+                            Generated filename = PREFIX + DATE + SEQUENCE.json (e.g., NEFT20260324001.json)
                         </p>
                         <div class="config-row">
                             <label>Prefix:</label>
@@ -379,7 +403,7 @@
 
 <script src="js/app.js"></script>
 <script src="js/upload.js"></script>
-<script src="js/xml_gen.js"></script>
+<script src="js/json_gen.js"></script>
 <script src="js/processing.js"></script>
 <script src="js/results.js"></script>
 <script src="js/mapping.js"></script>

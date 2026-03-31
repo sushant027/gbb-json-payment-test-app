@@ -57,7 +57,35 @@ const Processing = {
 
     async submitGbb() {
         if (!Processing.currentRunId) return;
-        await Processing._callApi('submit-gbb', 'submitGbbBtn', 'Submit to GBB');
+
+        const btn = document.getElementById('submitGbbBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="loading"></span> Submitting...';
+
+        // Get optional GBB URL override
+        const gbbUrl = document.getElementById('gbbUrlInput').value.trim();
+        const body = gbbUrl ? JSON.stringify({ gbb_url: gbbUrl }) : '{}';
+
+        try {
+            const res = await fetch(`/api/processing/test-runs/${Processing.currentRunId}/submit-gbb`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: body
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                App.showAlert('procResult', data.message, 'success');
+            } else {
+                App.showAlert('procResult', data.error || 'Submit failed', 'danger');
+            }
+            Processing.loadRunDetails();
+        } catch (err) {
+            App.showAlert('procResult', 'Network error: ' + err.message, 'danger');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = 'Submit JSON to GBB';
+        }
     },
 
     async processInitiation() {
@@ -125,15 +153,15 @@ const Processing = {
 
     _updateButtons(status) {
         const s = status || '';
-        document.getElementById('submitGbbBtn').disabled = !['xml_generated'].includes(s);
-        document.getElementById('procInitBtn').disabled = !['initiated', 'initiation_processed', 'response_processed'].includes(s);
-        document.getElementById('procRespBtn').disabled = !['initiated', 'initiation_processed', 'response_processed'].includes(s);
+        document.getElementById('submitGbbBtn').disabled = !['json_generated'].includes(s);
+        document.getElementById('procInitBtn').disabled = !['initiated', 'submitted', 'initiation_processed', 'response_processed'].includes(s);
+        document.getElementById('procRespBtn').disabled = !['initiated', 'submitted', 'initiation_processed', 'response_processed'].includes(s);
         document.getElementById('validateBtn').disabled = !['initiation_processed', 'response_processed'].includes(s);
     },
 
     _updateSteps(status) {
         const steps = {
-            'step-submit': ['initiated', 'initiation_processed', 'response_processed', 'validated', 'completed'],
+            'step-submit': ['initiated', 'submitted', 'initiation_processed', 'response_processed', 'validated', 'completed'],
             'step-initiation': ['initiation_processed', 'response_processed', 'validated', 'completed'],
             'step-response': ['response_processed', 'validated', 'completed'],
             'step-validate': ['validated', 'completed']

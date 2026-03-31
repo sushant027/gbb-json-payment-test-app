@@ -1,0 +1,115 @@
+{
+    "Payments": {
+        "BatchDetails": [
+            {
+                "DebitAccounts": {
+                    "DebitAccount": {
+                        "FileOrgtr": {
+                            "C7002": [
+                                "C-CGA",
+                                "111231",
+                                "30/06/2025"
+                            ]
+                        },
+                        "C2020": "S062502392250",
+                        "C4063": "2247196.00",
+                        "C3380": "20250630",
+                        "C5756": "CNRB0003525",
+                        "C6021": "3525201000133",
+                        "C6091": "CDDOASIGUWAHATI",
+                        "C5629": "EMLcbs.cpsms.cga@nic.in"
+                    }
+                },
+                "CreditAccounts": {
+                    "CreditAccount": [
+                        {
+                            "RmtInf": {
+                                "C7495": [
+                                    "S062502392273"
+                                ]
+                            },
+                            "C4038": "54072.00",
+                            "C5569": "CNRB0001155",
+                            "C6061": "1155101017319",
+                            "C6081": "Jogesh Kurmi",
+                            "PFMSTranId": "S062502392273",
+                            "PmtMtd": "ANYM",
+                            "UID": "",
+                            "BankIIN": "",
+                            "C5565": ""
+                        },
+                        {
+                            "RmtInf": {
+                                "C7495": [
+                                    "Salary"
+                                ]
+                            },
+                            "C4038": "94079.00",
+                            "C5569": "CNRB0003371",
+                            "C6061": "3371101001612",
+                            "C6081": "Homen Medhi",
+                            "PFMSTranId": "S062502392274",
+                            "PmtMtd": "ANYM",
+                            "UID": "",
+                            "BankIIN": "",
+                            "C5565": ""
+                        }
+                    ]
+                },
+                "CorporateId": "111231",
+                "PFMSBatchNo": "S062502392250",
+                "C3535": "1030",
+                "C1106": "2"
+            },
+            {
+                "DebitAccounts": {
+                    "DebitAccount": {
+                        "FileOrgtr": {
+                            "C7002": [
+                                "C-CGA",
+                                "111231",
+                                "30/06/2025"
+                            ]
+                        },
+                        "C2020": "S062502392250",
+                        "C4063": "2247196.00",
+                        "C3380": "20250630",
+                        "C5756": "CNRB0003525",
+                        "C6021": "3525201000133",
+                        "C6091": "CDDOASIGUWAHATI",
+                        "C5629": "EMLcbs.cpsms.cga@nic.in"
+                    }
+                },
+                "CreditAccounts": {
+                    "CreditAccount": {
+                        "RmtInf": {
+                            "C7495": [
+                                "Salary"
+                            ]
+                        },
+                        "C4038": "54072.00",
+                        "C5569": "CNRB0001155",
+                        "C6061": "1155101017319",
+                        "C6081": "Jogesh Kurmi",
+                        "PFMSTranId": "S062502392273",
+                        "PmtMtd": "ANYM",
+                        "UID": "",
+                        "BankIIN": "",
+                        "C5565": ""
+                    }
+                },
+                "CorporateId": "111231",
+                "PFMSBatchNo": "S062502392280",
+                "C3535": "1030",
+                "C1106": "1"
+            }
+        ],
+        "MessageId": "024PAOPAYREQ23062025576",
+        "Source": "PFMS",
+        "Destination": "024",
+        "BankCode": "024",
+        "BankName": "CANARA BANK",
+        "RecordsCount": "2",
+        "PaymentProduct": "PAO"
+    }
+}

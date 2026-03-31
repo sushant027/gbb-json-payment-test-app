@@ -1,27 +1,27 @@
 /**
- * Mapping page — scheme management and XML field mapping via click-to-map UI.
+ * Mapping page — scheme management and JSON field mapping via click-to-map UI.
  *
  * Workflow:
  * 1. Create/select a scheme
- * 2. Upload sample XML for each type (request/initiation/response)
- * 3. Credit repeating block auto-detected from XML structure
- * 4. Click Excel column (left), then click XML node (right) to create mapping
+ * 2. Upload sample JSON for each type (request/initiation/response)
+ * 3. Credit repeating block auto-detected from JSON structure (arrays of objects)
+ * 4. Click Excel column (left), then click JSON node (right) to create mapping
  *    - Nodes inside credit block are auto-classified as credit fields
  * 5. Configure special fields (batch ref, credit ref, status fields/codes)
- * 6. Save mapping config (includes debit_element auto-derived from credit block)
+ * 6. Save mapping config
  */
 const Mapping = {
     currentSchemeId: null,
-    currentXmlType: 'request',
-    xmlTree: null,
+    currentJsonType: 'request',
+    jsonTree: null,
     selectedSource: null,    // Currently selected left-panel item
     mappingConfig: {},       // Full mapping config being built
     filenamePattern: {},     // Filename pattern from scheme (stored in separate DB column)
-    allXmlPaths: [],         // All attribute paths from parsed XML
-    detectedBlocks: [],      // Auto-detected repeating blocks
+    allJsonPaths: [],        // All paths from parsed JSON
+    detectedBlocks: [],      // Auto-detected repeating blocks (arrays of objects)
     creditNodePaths: new Set(), // Paths that belong to the credit block
 
-    // Excel columns available for request XML mapping
+    // Excel columns available for request JSON mapping
     EXCEL_COLUMNS: [
         'tcid', 'scheme', 'debit_account', 'debit_account_parent', 'debit_ifsc', 'debit_amount',
         'credit_account', 'credit_ifsc', 'credit_count', 'credit_amount',
@@ -107,25 +107,24 @@ const Mapping = {
             }
 
             // Store split response flag and show/hide Response Fail tab
-            Mapping.isResponseXmlSplit = scheme.is_response_xml_split === 'Y';
+            Mapping.isResponseSplit = scheme.is_response_xml_split === 'Y';
             const responseFailTab = document.getElementById('responseFailTab');
             if (responseFailTab) {
-                responseFailTab.style.display = Mapping.isResponseXmlSplit ? '' : 'none';
+                responseFailTab.style.display = Mapping.isResponseSplit ? '' : 'none';
             }
-            console.log('[Mapping] Loaded scheme: is_response_xml_split=%s',
-                Mapping.isResponseXmlSplit ? 'Y' : 'N');
-            // Load filename_pattern from scheme (stored in its own DB column)
+
+            // Load filename_pattern from scheme
             Mapping.filenamePattern = scheme.filename_pattern || {};
 
             document.getElementById('mappingWorkspace').classList.remove('hidden');
-            Mapping.switchXmlType('request');
+            Mapping.switchJsonType('request');
         } catch (err) {
             console.error('[Mapping] Error loading scheme:', err);
         }
     },
 
-    switchXmlType(type) {
-        Mapping.currentXmlType = type;
+    switchJsonType(type) {
+        Mapping.currentJsonType = type;
         Mapping.selectedSource = null;
         Mapping.detectedBlocks = [];
         Mapping.creditNodePaths = new Set();
@@ -137,22 +136,19 @@ const Mapping = {
         }
 
         // Update label
-        document.getElementById('xmlTypeLabel').textContent =
+        document.getElementById('jsonTypeLabel').textContent =
             type.charAt(0).toUpperCase() + type.slice(1);
 
         // Show/hide status fields (only for initiation/response/response_fail)
         document.getElementById('statusFieldsArea').classList.toggle('hidden', type === 'request');
 
-        // Show/hide success indicator tag (only for response tab when split is enabled)
+        // Show/hide success indicator (only for response tab when split is enabled)
         const successIndicatorRow = document.getElementById('successIndicatorRow');
         if (successIndicatorRow) {
             successIndicatorRow.style.display =
-                (type === 'response' && Mapping.isResponseXmlSplit) ? '' : 'none';
+                (type === 'response' && Mapping.isResponseSplit) ? '' : 'none';
         }
-        console.log('[Mapping] switchXmlType: type=%s, isResponseXmlSplit=%s, '
-            + 'showSuccessIndicator=%s',
-            type, Mapping.isResponseXmlSplit,
-            type === 'response' && Mapping.isResponseXmlSplit);
+
         // Show/hide filename pattern area (only for request)
         document.getElementById('filenamePatternArea').classList.toggle('hidden', type !== 'request');
 
@@ -163,47 +159,48 @@ const Mapping = {
         Mapping._loadExistingConfig();
 
         // Clear tree
-        document.getElementById('xmlTreeContainer').innerHTML = '<span class="text-muted">Upload a sample XML to see its structure</span>';
+        document.getElementById('jsonTreeContainer').innerHTML = '<span class="text-muted">Upload a sample JSON to see its structure</span>';
         document.getElementById('mappingArea').classList.remove('hidden');
 
-        console.log('[Mapping] Switched to XML type:', type);
+        console.log('[Mapping] Switched to JSON type:', type);
     },
 
-    async uploadSampleXml() {
-        const fileInput = document.getElementById('sampleXmlFile');
+    async uploadSampleJson() {
+        const fileInput = document.getElementById('sampleJsonFile');
         if (!fileInput.files.length) {
-            alert('Please select an XML file');
+            alert('Please select a JSON file');
             return;
         }
 
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
-        formData.append('xml_type', Mapping.currentXmlType);
+        formData.append('json_type', Mapping.currentJsonType);
 
-        console.log('[Mapping] Uploading sample XML:', fileInput.files[0].name);
+        console.log('[Mapping] Uploading sample JSON:', fileInput.files[0].name);
 
         try {
-            const res = await fetch(`/api/schemes/${Mapping.currentSchemeId}/parse-xml`, {
+            const res = await fetch(`/api/schemes/${Mapping.currentSchemeId}/parse-json`, {
                 method: 'POST',
                 body: formData
             });
             const data = await res.json();
 
             if (res.ok) {
-                Mapping.xmlTree = data.tree;
-                Mapping.allXmlPaths = [];
+                Mapping.jsonTree = data.tree;
+                Mapping.allJsonPaths = [];
 
-                // Auto-detect repeating blocks and populate dropdown
+                // Auto-detect repeating blocks (arrays of objects) and populate dropdowns
                 Mapping.detectedBlocks = Mapping._detectRepeatingBlocks(data.tree);
+                Mapping._populateBatchContainerDropdown();
                 Mapping._populateCreditBlockDropdown();
 
-                // Render tree (will mark credit nodes based on selected block)
-                Mapping._renderXmlTree(data.tree);
+                // Render tree
+                Mapping._renderJsonTree(data.tree);
                 Mapping._populatePathSelects();
-                console.log('[Mapping] XML parsed successfully, detected %d repeating blocks',
+                console.log('[Mapping] JSON parsed successfully, detected %d repeating blocks',
                     Mapping.detectedBlocks.length);
             } else {
-                alert(data.error || 'Failed to parse XML');
+                alert(data.error || 'Failed to parse JSON');
             }
         } catch (err) {
             alert('Error: ' + err.message);
@@ -211,37 +208,37 @@ const Mapping = {
     },
 
     /**
-     * Walk the parsed XML tree to find repeating elements (siblings with same tag).
+     * Walk the parsed JSON tree to find arrays of objects (repeating blocks).
      * Returns array of { parent_path, repeat_element, count }.
-     * Paths exclude the root element name for consistency with backend XPath navigation.
      */
-    _detectRepeatingBlocks(node, parentPath = '', isRoot = true) {
+    _detectRepeatingBlocks(node, parentPath = '') {
         const blocks = [];
-        // Root element: path stays empty; children build from ''
-        const currentPath = isRoot ? '' : (parentPath ? `${parentPath}/${node.tag}` : node.tag);
 
-        if (node.children && node.children.length > 0) {
-            // Count child tags
-            const tagCounts = {};
-            node.children.forEach(c => {
-                tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1;
-            });
+        if (node.type === 'array' && node.item_count > 0 && node.children && node.children.length > 0) {
+            // Check if children represent an object (first child has children = keys of object)
+            const firstChild = node.children[0];
+            if (firstChild && (firstChild.type === 'object' || firstChild.children)) {
+                // This is an array of objects — it's a repeating block
+                // parent_path = path to the parent object containing this array
+                // repeat_element = the key name of this array
+                const parts = node.path.split('.');
+                const repeatElement = parts.pop();
+                const parentPathStr = parts.join('.');
 
-            for (const [tag, count] of Object.entries(tagCounts)) {
-                if (count > 1) {
-                    blocks.push({
-                        parent_path: currentPath,
-                        repeat_element: tag,
-                        count: count
-                    });
-                    console.log('[Mapping] Detected repeating block: %s -> %s (%d items)',
-                        currentPath, tag, count);
-                }
+                blocks.push({
+                    parent_path: parentPathStr,
+                    repeat_element: repeatElement,
+                    count: node.item_count || node.children.length
+                });
+                console.log('[Mapping] Detected repeating block: %s.%s (%d items)',
+                    parentPathStr, repeatElement, node.item_count);
             }
+        }
 
-            // Recurse into children
+        // Recurse into children
+        if (node.children) {
             node.children.forEach(child => {
-                blocks.push(...Mapping._detectRepeatingBlocks(child, currentPath, false));
+                blocks.push(...Mapping._detectRepeatingBlocks(child, node.path));
             });
         }
 
@@ -250,7 +247,6 @@ const Mapping = {
 
     /**
      * Populate the credit block dropdown with detected repeating blocks.
-     * Auto-select the first block found.
      */
     _populateCreditBlockDropdown() {
         const select = document.getElementById('creditBlockSelect');
@@ -261,7 +257,7 @@ const Mapping = {
 
         Mapping.detectedBlocks.forEach((block, idx) => {
             const parentLabel = block.parent_path || '(root)';
-            const label = `${parentLabel} / ${block.repeat_element} (${block.count} items)`;
+            const label = `${parentLabel}.${block.repeat_element} (${block.count} items)`;
             const value = JSON.stringify({ parent_path: block.parent_path, repeat_element: block.repeat_element });
             select.innerHTML += `<option value='${value}'>${label}</option>`;
         });
@@ -283,18 +279,43 @@ const Mapping = {
             }
         }
 
-        if (!matched && Mapping.detectedBlocks.length > 0) {
-            select.selectedIndex = 1; // first detected block
+        if (!matched) {
+            // Do NOT auto-select — require user to explicitly choose the credit block.
+            // Previously this auto-selected index 1 (first detected block), which
+            // incorrectly picked BatchDetails instead of CreditAccount in nested structures.
+            select.selectedIndex = 0;
         }
 
-        // Trigger selection
         Mapping.onCreditBlockSelected();
     },
 
     /**
-     * Called when user selects a credit block from the dropdown.
-     * Updates hidden inputs and rebuilds credit node tracking.
+     * Populate the batch container dropdown with top-level arrays from the JSON tree.
+     * These are arrays that are direct children of the root key (e.g., BatchDetails).
      */
+    _populateBatchContainerDropdown() {
+        const select = document.getElementById('batchContainerSelect');
+        select.innerHTML = '<option value="">-- Auto-detect --</option>';
+
+        if (Mapping.jsonTree && Mapping.jsonTree.children) {
+            Mapping.jsonTree.children
+                .filter(c => c.type === 'array')
+                .forEach(child => {
+                    const label = `${child.key} (${child.item_count || 0} items)`;
+                    select.innerHTML += `<option value="${child.key}">${label}</option>`;
+                });
+        }
+
+        // Auto-select from existing config
+        const type = Mapping.currentJsonType;
+        const existingContainer = (Mapping.mappingConfig[type] || {}).batch_container;
+        if (existingContainer) {
+            select.value = existingContainer;
+        }
+
+        console.log('[Mapping] Batch container dropdown populated');
+    },
+
     onCreditBlockSelected() {
         const select = document.getElementById('creditBlockSelect');
         const val = select.value;
@@ -310,7 +331,7 @@ const Mapping = {
                 // Build the set of credit node paths for classification
                 Mapping._buildCreditNodePaths(block.parent_path, block.repeat_element);
 
-                console.log('[Mapping] Credit block selected: %s -> %s, credit paths: %d',
+                console.log('[Mapping] Credit block selected: %s.%s, credit paths: %d',
                     block.parent_path, block.repeat_element, Mapping.creditNodePaths.size);
             } catch (e) {
                 console.error('[Mapping] Error parsing credit block selection:', e);
@@ -321,131 +342,181 @@ const Mapping = {
         }
 
         // Re-render tree to update credit node visual tagging
-        if (Mapping.xmlTree) {
-            Mapping.allXmlPaths = [];
-            Mapping._renderXmlTree(Mapping.xmlTree);
+        if (Mapping.jsonTree) {
+            Mapping.allJsonPaths = [];
+            Mapping._renderJsonTree(Mapping.jsonTree);
             Mapping._populatePathSelects();
         }
 
-        // Reclassify existing mappings that may have been added before credit block was selected
+        // Reclassify existing mappings
         Mapping._reclassifyMappings();
     },
 
     /**
-     * Move misclassified credit fields from debit fields[] to credit_block.fields[].
-     * This handles the case where user mapped credit attributes before selecting the credit block.
-     * Also converts their xml_path from full path (e.g., BatchDetails/.../CreditAccount/@C4038)
-     * to relative path (e.g., @C4038).
+     * Reclassify misplaced fields between debit fields[], top_level_fields[], and credit_block.fields[].
+     *
+     * - Fields in fields[] that belong to the credit block are moved to credit_block.fields[].
+     * - Fields in fields[] that are NOT inside the batch container are moved to top_level_fields[].
+     * - Fields in top_level_fields[] that ARE inside the batch container are moved to fields[].
      */
     _reclassifyMappings() {
-        const type = Mapping.currentXmlType;
+        const type = Mapping.currentJsonType;
         const config = Mapping.mappingConfig[type];
-        if (!config || !config.fields) return;
+        if (!config) return;
+        if (!config.fields) config.fields = [];
 
         const creditParent = document.getElementById('creditParentPath').value;
         const creditRepeat = document.getElementById('creditRepeatElement').value;
-        if (!creditParent || !creditRepeat) return;
 
         if (!config.credit_block) config.credit_block = { fields: [] };
         if (!config.credit_block.fields) config.credit_block.fields = [];
+        if (!config.top_level_fields) config.top_level_fields = [];
 
-        const toMove = [];
-        config.fields = config.fields.filter(f => {
-            const p = f.xml_path || '';
-            const parts = p.split('/');
+        let changed = false;
 
-            // Check if path contains the repeat element name (e.g., "CreditAccount/@C4038"
-            // or "BatchDetails/CreditAccounts/CreditAccount/@C4038")
-            const repeatIdx = parts.findIndex(part => part === creditRepeat);
-            if (repeatIdx >= 0) {
-                // Convert path to relative: everything after the repeat element
-                const relativeParts = parts.slice(repeatIdx + 1);
-                f.xml_path = relativeParts.join('/') || p;
-                toMove.push(f);
-                return false;
+        // 1. Move credit fields from fields[] to credit_block.fields[]
+        if (creditParent && creditRepeat) {
+            const creditPrefix = `${creditParent}.${creditRepeat}.`;
+            const toCredit = [];
+            config.fields = config.fields.filter(f => {
+                const p = f.json_path || '';
+                if (p.startsWith(creditPrefix)) {
+                    f.json_path = p.substring(creditPrefix.length);
+                    toCredit.push(f);
+                    return false;
+                }
+                if (Mapping.creditNodePaths.has(p)) {
+                    toCredit.push(f);
+                    return false;
+                }
+                return true;
+            });
+            toCredit.forEach(f => config.credit_block.fields.push(f));
+            if (toCredit.length > 0) {
+                console.log('[Mapping] Reclassified %d fields from debit to credit:', toCredit.length, toCredit);
+                changed = true;
+            }
+        }
+
+        // 2. Reclassify between fields[] and top_level_fields[] based on batch container
+        const batchContainer = Mapping._getBatchContainer();
+        if (batchContainer) {
+            // Helper: check if a cleaned path belongs inside the batch container.
+            // After _cleanMappingPath strips root_key and batch_container prefix,
+            // batch-level fields have paths like "DebitAccounts.DebitAccount.C6021"
+            // while top-level fields have paths like "MessageId".
+            // Since _cleanMappingPath already strips the batch container prefix from
+            // batch-level paths, we need to check against the tree to determine level.
+            // A simpler heuristic: if we can find this path under the batch container
+            // in the tree, it's batch-level. Otherwise it's top-level.
+            const isBatchLevelPath = (jsonPath) => {
+                if (!Mapping.jsonTree) return true; // default to batch if no tree
+                const rootKey = Mapping.jsonTree.key;
+                // Try to find the node under root.batchContainer
+                const batchFullPath = `${rootKey}.${batchContainer}`;
+                const batchNode = Mapping._findNodeByPath(Mapping.jsonTree, batchFullPath);
+                if (!batchNode || !batchNode.children) return true;
+                // For array nodes, parse_json_to_tree flattens the first element's
+                // children directly under the array node. So batchNode.children ARE
+                // the batch element's children (DebitAccounts, CreditAccounts, CorporateId, etc.)
+                const firstSeg = jsonPath.split('.')[0];
+                return batchNode.children.some(c => c.key === firstSeg);
+            };
+
+            // Move top-level fields from fields[] to top_level_fields[]
+            const toTopLevel = [];
+            config.fields = config.fields.filter(f => {
+                const p = f.json_path || '';
+                if (!isBatchLevelPath(p)) {
+                    toTopLevel.push(f);
+                    return false;
+                }
+                return true;
+            });
+            toTopLevel.forEach(f => config.top_level_fields.push(f));
+            if (toTopLevel.length > 0) {
+                console.log('[Mapping] Reclassified %d fields from debit to top-level:', toTopLevel.length, toTopLevel);
+                changed = true;
             }
 
-            // Check if it's an @attr path that matches a known credit attribute
-            if (p.startsWith('@') && Mapping.creditNodePaths.has(p)) {
-                toMove.push(f);
-                return false;
+            // Move batch-level fields from top_level_fields[] back to fields[]
+            const toBatch = [];
+            config.top_level_fields = config.top_level_fields.filter(f => {
+                const p = f.json_path || '';
+                if (isBatchLevelPath(p)) {
+                    toBatch.push(f);
+                    return false;
+                }
+                return true;
+            });
+            toBatch.forEach(f => config.fields.push(f));
+            if (toBatch.length > 0) {
+                console.log('[Mapping] Reclassified %d fields from top-level to debit:', toBatch.length, toBatch);
+                changed = true;
             }
+        }
 
-            return true;
-        });
-
-        toMove.forEach(f => config.credit_block.fields.push(f));
-
-        if (toMove.length > 0) {
-            console.log('[Mapping] Reclassified %d fields from debit to credit:', toMove.length, toMove);
+        if (changed) {
             Mapping._renderMappingsList();
         }
     },
 
     /**
-     * Build the set of attribute paths that belong inside the credit block.
-     * Walks the parsed XML tree to find nodes under the repeat element.
+     * Build the set of paths that belong inside the credit block.
      */
     _buildCreditNodePaths(parentPath, repeatElement) {
-        if (!Mapping.xmlTree) return;
+        if (!Mapping.jsonTree) return;
 
-        // Navigate to the parent element in the tree using full path
-        const pathParts = parentPath.split('/');
-        let current = Mapping.xmlTree;
+        // Find the array node in the tree by path
+        const fullPath = parentPath ? `${parentPath}.${repeatElement}` : repeatElement;
+        const arrayNode = Mapping._findNodeByPath(Mapping.jsonTree, fullPath);
 
-        for (const part of pathParts) {
-            // Skip root element name
-            if (part === Mapping.xmlTree.tag) continue;
-            const child = (current.children || []).find(c => c.tag === part);
-            if (!child) {
-                console.warn('[Mapping] Could not find %s in tree for credit path building', part);
-                return;
-            }
-            current = child;
+        if (!arrayNode || !arrayNode.children || arrayNode.children.length === 0) {
+            console.warn('[Mapping] Could not find credit array node at path:', fullPath);
+            return;
         }
 
-        // Find repeat elements under the parent
-        const repeatChildren = (current.children || []).filter(c => c.tag === repeatElement);
-        if (repeatChildren.length === 0) return;
-
-        // Take the first repeat element as representative — recursively collect all paths
-        const representative = repeatChildren[0];
-        Mapping._collectCreditPaths(representative, '');
-
+        // Collect all leaf paths from the first representative element
+        Mapping._collectCreditPaths(arrayNode.children, '');
         console.log('[Mapping] Credit node paths built:', [...Mapping.creditNodePaths]);
     },
 
-    /**
-     * Recursively collect all attribute and text paths from a credit block element.
-     * Paths are relative to the repeat element (e.g., @C4038, RmtInf/@attr, RmtInf/C7495).
-     */
-    _collectCreditPaths(node, relativePath) {
-        // Collect attributes at this level
-        if (node.attributes) {
-            Object.keys(node.attributes).forEach(attr => {
-                const path = relativePath ? `${relativePath}/@${attr}` : `@${attr}`;
-                Mapping.creditNodePaths.add(path);
-            });
-        }
-        // Collect text content path for leaf nodes
-        if (node.text && (!node.children || node.children.length === 0)) {
-            const path = relativePath ? relativePath : node.tag;
-            Mapping.creditNodePaths.add(path);
-        }
-        // Recurse into children
+    _findNodeByPath(node, targetPath) {
+        if (node.path === targetPath) return node;
         if (node.children) {
-            node.children.forEach(child => {
-                const childPath = relativePath ? `${relativePath}/${child.tag}` : child.tag;
-                Mapping._collectCreditPaths(child, childPath);
-            });
+            for (const child of node.children) {
+                const found = Mapping._findNodeByPath(child, targetPath);
+                if (found) return found;
+            }
         }
+        return null;
+    },
+
+    /**
+     * Recursively collect all leaf paths from credit block children.
+     */
+    _collectCreditPaths(children, relativePath) {
+        if (!children) return;
+        children.forEach(child => {
+            // For array index keys like "[0]", don't add a dot separator
+            const separator = child.key.startsWith('[') ? '' : '.';
+            const childRelPath = relativePath ? `${relativePath}${separator}${child.key}` : child.key;
+
+            if (child.value !== undefined && (!child.children || child.children.length === 0)) {
+                // Leaf node
+                Mapping.creditNodePaths.add(childRelPath);
+            }
+            if (child.children && child.children.length > 0) {
+                Mapping._collectCreditPaths(child.children, childRelPath);
+            }
+        });
     },
 
     _buildLeftPanel() {
         const container = document.getElementById('leftPanelItems');
         const titleEl = document.getElementById('leftPanelTitle');
 
-        if (Mapping.currentXmlType === 'request') {
+        if (Mapping.currentJsonType === 'request') {
             titleEl.textContent = 'Excel Columns';
             container.innerHTML = Mapping.EXCEL_COLUMNS.map(col => `
                 <div class="excel-column-item" data-source="${col}" onclick="Mapping.selectSource('${col}')">
@@ -453,7 +524,6 @@ const Mapping = {
                 </div>
             `).join('');
 
-            // Add auto-generate and hardcoded options
             container.innerHTML += `
                 <div style="margin-top:8px;padding-top:8px;border-top:1px solid #dee2e6">
                     <div class="excel-column-item" data-source="__auto__" onclick="Mapping.selectSource('__auto__')"
@@ -490,76 +560,69 @@ const Mapping = {
 
     selectSource(source) {
         Mapping.selectedSource = source;
-        // Update visual selection
         document.querySelectorAll('.excel-column-item').forEach(el => {
             el.classList.toggle('selected', el.dataset.source === source);
         });
         console.log('[Mapping] Selected source:', source);
     },
 
-    selectXmlNode(path, isCreditNode) {
+    selectJsonNode(path, isCreditNode, isTopLevel = false) {
         if (!Mapping.selectedSource) {
-            alert('First select a field from the left panel, then click an XML node.');
+            alert('First select a field from the left panel, then click a JSON node.');
             return;
         }
 
-        console.log('[Mapping] Creating mapping:', Mapping.selectedSource, '->', path,
-            isCreditNode ? '(CREDIT)' : '(DEBIT)');
+        const levelLabel = isCreditNode ? '(CREDIT)' : isTopLevel ? '(TOP-LEVEL)' : '(DEBIT)';
+        console.log('[Mapping] Creating mapping:', Mapping.selectedSource, '->', path, levelLabel);
 
         const source = Mapping.selectedSource;
 
         if (source === '__auto__') {
-            // Prompt for auto-generate config
             const prefix = prompt('Enter prefix (e.g., BATCH, CREDIT):', '');
             const length = parseInt(prompt('Enter total length:', '12')) || 12;
             const type = prompt('Type: numeric or alphanumeric', 'alphanumeric');
 
             Mapping._addMapping({
                 source: 'auto',
-                xml_path: path,
+                json_path: path,
                 auto_generate: { type, prefix: prefix || '', length }
-            }, isCreditNode);
+            }, isCreditNode, isTopLevel);
         } else if (source === '__hardcoded__') {
-            // Pre-fill with value from uploaded XML as default
-            const defaultValue = Mapping._getXmlTreeValue(path) || '';
+            const defaultValue = Mapping._getJsonTreeValue(path) || '';
             const value = prompt('Enter hardcoded value:', defaultValue);
             if (value !== null) {
                 Mapping._addMapping({
                     source: 'hardcoded',
-                    xml_path: path,
+                    json_path: path,
                     value: value
-                }, isCreditNode);
+                }, isCreditNode, isTopLevel);
             }
         } else if (source === '__filename__') {
-            // Map the generated filename value to this XML tag
             Mapping._addMapping({
                 source: 'filename',
-                xml_path: path
-            }, isCreditNode);
+                json_path: path
+            }, isCreditNode, isTopLevel);
         } else if (source === '__credit_ref_copy__') {
-            // Map the credit reference value (copy) to this XML tag
             Mapping._addMapping({
                 source: 'credit_ref_copy',
-                xml_path: path
-            }, isCreditNode);
+                json_path: path
+            }, isCreditNode, isTopLevel);
         } else if (source === '__batch_ref_copy__') {
-            // Map the batch reference value (copy) to this XML tag
             Mapping._addMapping({
                 source: 'batch_ref_copy',
-                xml_path: path
-            }, isCreditNode);
-        } else if (Mapping.currentXmlType === 'request') {
+                json_path: path
+            }, isCreditNode, isTopLevel);
+        } else if (Mapping.currentJsonType === 'request') {
             Mapping._addMapping({
                 source: 'excel',
                 excel_column: source,
-                xml_path: path
-            }, isCreditNode);
+                json_path: path
+            }, isCreditNode, isTopLevel);
         } else {
-            // Initiation/Response: map XML path to internal field
             Mapping._addMapping({
-                xml_path: path,
+                json_path: path,
                 map_to: source
-            }, isCreditNode);
+            }, isCreditNode, isTopLevel);
         }
 
         Mapping.selectedSource = null;
@@ -567,13 +630,10 @@ const Mapping = {
         Mapping._renderMappingsList();
     },
 
-    /**
-     * Add a mapping to the config. Uses isCreditNode (from tree metadata) to classify.
-     */
-    _addMapping(mapping, isCreditNode) {
-        const type = Mapping.currentXmlType;
+    _addMapping(mapping, isCreditNode, isTopLevel = false) {
+        const type = Mapping.currentJsonType;
         if (!Mapping.mappingConfig[type]) {
-            Mapping.mappingConfig[type] = { fields: [], credit_block: { fields: [] } };
+            Mapping.mappingConfig[type] = { fields: [], credit_block: { fields: [] }, top_level_fields: [] };
         }
 
         const config = Mapping.mappingConfig[type];
@@ -583,26 +643,32 @@ const Mapping = {
             if (!config.credit_block.fields) config.credit_block.fields = [];
             config.credit_block.fields.push(mapping);
             console.log('[Mapping] Added as CREDIT field:', mapping);
+        } else if (isTopLevel) {
+            if (!config.top_level_fields) config.top_level_fields = [];
+            config.top_level_fields.push(mapping);
+            console.log('[Mapping] Added as TOP-LEVEL field:', mapping);
         } else {
             if (!config.fields) config.fields = [];
             config.fields.push(mapping);
             console.log('[Mapping] Added as DEBIT field:', mapping);
         }
 
-        // Mark XML node as mapped
-        document.querySelectorAll('.xml-node-item').forEach(el => {
-            if (el.dataset.path === mapping.xml_path) {
+        // Mark JSON node as mapped
+        document.querySelectorAll('.json-node-item').forEach(el => {
+            if (el.dataset.path === mapping.json_path) {
                 el.classList.add('mapped');
             }
         });
     },
 
-    removeMapping(type, isCredit, index) {
+    removeMapping(type, fieldType, index) {
         const config = Mapping.mappingConfig[type];
         if (!config) return;
 
-        if (isCredit) {
+        if (fieldType === true || fieldType === 'credit') {
             config.credit_block.fields.splice(index, 1);
+        } else if (fieldType === 'top_level') {
+            if (config.top_level_fields) config.top_level_fields.splice(index, 1);
         } else {
             config.fields.splice(index, 1);
         }
@@ -611,7 +677,7 @@ const Mapping = {
 
     _renderMappingsList() {
         const container = document.getElementById('mappingsList');
-        const type = Mapping.currentXmlType;
+        const type = Mapping.currentJsonType;
         const config = Mapping.mappingConfig[type] || {};
 
         let html = '';
@@ -632,11 +698,33 @@ const Mapping = {
                 <div class="mapping-item">
                     <strong>${left}</strong>
                     <span class="arrow">-></span>
-                    <code>${f.xml_path}</code>
+                    <code>${f.json_path}</code>
                     <button class="remove-btn" onclick="Mapping.removeMapping('${type}', false, ${idx})">x</button>
                 </div>
             `;
         });
+
+        // Top-level (root) fields
+        const topFields = config.top_level_fields || [];
+        if (topFields.length) {
+            html += '<div style="margin-top:8px;font-size:12px;font-weight:600;color:#8e44ad">Root-Level Fields:</div>';
+            topFields.forEach((f, idx) => {
+                const left = f.source === 'auto' ? `[Auto: ${f.auto_generate?.prefix || ''}]` :
+                             f.source === 'hardcoded' ? `[Fixed: ${f.value}]` :
+                             f.source === 'filename' ? '[Filename]' :
+                             f.source === 'credit_ref_copy' ? '[CreditRef Copy]' :
+                             f.source === 'batch_ref_copy' ? '[BatchRef Copy]' :
+                             f.excel_column || f.map_to || '?';
+                html += `
+                    <div class="mapping-item" style="border-left:3px solid #8e44ad">
+                        <strong>${left}</strong>
+                        <span class="arrow">-></span>
+                        <code>${f.json_path}</code>
+                        <button class="remove-btn" onclick="Mapping.removeMapping('${type}', 'top_level', ${idx})">x</button>
+                    </div>
+                `;
+            });
+        }
 
         // Credit-level fields
         const creditFields = config.credit_block?.fields || [];
@@ -653,8 +741,8 @@ const Mapping = {
                     <div class="mapping-item" style="border-left:3px solid #28a745">
                         <strong>${left}</strong>
                         <span class="arrow">-></span>
-                        <code>${f.xml_path}</code>
-                        <button class="remove-btn" onclick="Mapping.removeMapping('${type}', true, ${idx})">x</button>
+                        <code>${f.json_path}</code>
+                        <button class="remove-btn" onclick="Mapping.removeMapping('${type}', 'credit', ${idx})">x</button>
                     </div>
                 `;
             });
@@ -664,236 +752,183 @@ const Mapping = {
     },
 
     /**
-     * Render the XML tree with credit nodes visually tagged.
-     * Nodes inside the credit block get data-inside-credit="true" and green styling.
-     * parentPath tracks the full ancestor path (excluding root) for correct path building.
+     * Render the JSON tree with credit nodes visually tagged.
+     * Uses the tree structure from parse_json_to_tree backend response.
      */
-    _renderXmlTree(node, depth = 0, insideCreditBlock = false, parentPath = '', creditRelativePath = '') {
-        const container = document.getElementById('xmlTreeContainer');
+    _renderJsonTree(node, depth = 0, insideCreditBlock = false, creditRelativePath = '', insideBatchContainer = false) {
+        const container = document.getElementById('jsonTreeContainer');
         if (depth === 0) {
             container.innerHTML = '';
-            Mapping.allXmlPaths = [];
+            Mapping.allJsonPaths = [];
         }
 
-        const creditRepeat = document.getElementById('creditRepeatElement').value;
         const creditParent = document.getElementById('creditParentPath').value;
+        const creditRepeat = document.getElementById('creditRepeatElement').value;
+        const creditFullPath = creditParent ? `${creditParent}.${creditRepeat}` : creditRepeat;
 
-        // Build current node's full path (excluding root element name)
-        let currentFullPath;
-        if (depth === 0) {
-            currentFullPath = '';  // Root element — path prefix is empty
-        } else {
-            currentFullPath = parentPath ? `${parentPath}/${node.tag}` : node.tag;
-        }
+        // Check if this node is the credit array
+        const isCreditArray = creditRepeat && node.path === creditFullPath;
 
-        // Check if this node is the start of the credit repeating block
-        const isRepeatElement = (creditRepeat && node.tag === creditRepeat && insideCreditBlock);
-        // Check if this node is the parent container of the credit block
-        // Use full path comparison instead of just tag name to avoid false matches
-        const isInsideParent = creditParent && (
-            currentFullPath === creditParent ||
-            (depth === 0 && creditParent === node.tag)
-        );
-        const childInsideCredit = insideCreditBlock || isInsideParent;
+        // Check if we're entering the parent of the credit array
+        const isParentOfCredit = creditParent && node.path === creditParent;
+        const childInsideCredit = insideCreditBlock || isCreditArray;
 
-        // Build credit-relative path (path relative to the credit repeat element)
+        // Check if this node is the batch container (e.g., "BatchDetails" array)
+        const batchContainer = Mapping._getBatchContainer();
+        const isThisBatchContainer = batchContainer && node.key === batchContainer && !insideBatchContainer;
+        const childInsideBatch = insideBatchContainer || isThisBatchContainer;
+
+        // Build credit-relative path
         let currentCreditRelativePath = '';
-        if (insideCreditBlock && !isRepeatElement) {
-            // We're inside credit block but not at the repeat element itself
-            // Build path relative to repeat element
+        if (insideCreditBlock && !isCreditArray) {
+            // For array index keys like "[0]", don't add a dot separator
+            const sep = node.key.startsWith('[') ? '' : '.';
             currentCreditRelativePath = creditRelativePath
-                ? `${creditRelativePath}/${node.tag}`
-                : node.tag;
+                ? `${creditRelativePath}${sep}${node.key}`
+                : node.key;
         }
 
         const el = document.createElement('div');
         el.style.paddingLeft = (depth * 20) + 'px';
 
-        // Element name
-        const elemSpan = document.createElement('span');
-        elemSpan.className = 'xml-element';
+        // Node label
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'xml-element';
 
-        if (isRepeatElement) {
-            elemSpan.innerHTML = '&lt;' + node.tag + '&gt; <span style="color:#28a745;font-size:11px;font-weight:600">(Credit Block)</span>';
-            elemSpan.style.color = '#28a745';
-        } else {
-            elemSpan.textContent = '<' + node.tag + '>';
-        }
-
-        el.appendChild(elemSpan);
-        container.appendChild(el);
-
-        // Attributes
-        if (node.attributes) {
-            Object.entries(node.attributes).forEach(([attr, val]) => {
-                // Determine if this attribute is inside the credit block
-                const attrInsideCredit = isRepeatElement || (insideCreditBlock && depth > 1);
-                const path = Mapping._buildAttrPath(node, attr, depth, attrInsideCredit, currentFullPath, currentCreditRelativePath);
-                Mapping.allXmlPaths.push(path);
-
-                const attrEl = document.createElement('div');
-                attrEl.style.paddingLeft = ((depth + 1) * 20) + 'px';
-
-                const creditAttr = attrInsideCredit ? 'data-inside-credit="true"' : '';
-                const creditStyle = attrInsideCredit ? 'border-left:2px solid #28a745;padding-left:4px;' : '';
-
-                const escapedPath = path.replace(/'/g, "\\'");
-                attrEl.innerHTML = `
-                    <span class="xml-node-item xml-attribute" data-path="${path}"
-                          ${creditAttr}
-                          style="${creditStyle}"
-                          onclick="Mapping.selectXmlNode('${escapedPath}', ${attrInsideCredit})">
-                        @${attr} <span class="node-type">= "${Mapping._truncate(val, 30)}"</span>
-                        ${attrInsideCredit ? '<span style="color:#28a745;font-size:10px"> [credit]</span>' : ''}
-                    </span>
-                `;
-                container.appendChild(attrEl);
-            });
-        }
-
-        // Text-content elements (leaf nodes with text, like <C7002>value</C7002>)
-        if (node.text && (!node.children || node.children.length === 0)) {
-            const textInsideCredit = isRepeatElement || (insideCreditBlock && depth > 1);
-            let textPath = textInsideCredit
-                ? (currentCreditRelativePath || node.tag)
-                : (currentFullPath || node.tag);
-
-            // Append index for repeated leaf siblings (e.g., C7495[0], C7495[1])
-            if (node._repeatIndex !== undefined) {
-                textPath = `${textPath}[${node._repeatIndex}]`;
+        if (node.type === 'object') {
+            labelSpan.textContent = `${node.key} {`;
+            if (isCreditArray) {
+                labelSpan.innerHTML = `${node.key} [] <span style="color:#28a745;font-size:11px;font-weight:600">(Credit Block - ${node.item_count || ''} items)</span>`;
+                labelSpan.style.color = '#28a745';
+            } else if (node.type === 'array') {
+                labelSpan.textContent = `${node.key} [${node.item_count || ''}]`;
             }
-            Mapping.allXmlPaths.push(textPath);
+        } else if (node.type === 'array') {
+            if (isCreditArray) {
+                labelSpan.innerHTML = `${node.key} [] <span style="color:#28a745;font-size:11px;font-weight:600">(Credit Block - ${node.item_count || ''} items)</span>`;
+                labelSpan.style.color = '#28a745';
+            } else {
+                labelSpan.textContent = `${node.key} [${node.item_count || ''}]`;
+            }
+        } else {
+            // Leaf node — clickable for mapping
+            const isInsideCredit = insideCreditBlock && !isCreditArray;
+            const mappingPath = isInsideCredit ? currentCreditRelativePath : node.path;
 
-            // Visual label for repeated leaves: [1/3], [2/3], etc.
-            const repeatInfo = node._repeatTotal
-                ? `<span style="color:#6c757d;font-size:10px;margin-left:4px">[${node._repeatIndex + 1}/${node._repeatTotal}]</span>`
-                : '';
+            // Remove the root key prefix from the path for mapping
+            const cleanPath = Mapping._cleanMappingPath(mappingPath, isInsideCredit);
+            Mapping.allJsonPaths.push(cleanPath);
 
-            const textEl = document.createElement('div');
-            textEl.style.paddingLeft = ((depth + 1) * 20) + 'px';
+            // Determine if this is a top-level field (outside batch container, not credit)
+            const isTopLevel = !isInsideCredit && !insideBatchContainer && depth > 0;
 
-            const creditAttr = textInsideCredit ? 'data-inside-credit="true"' : '';
-            const creditStyle = textInsideCredit ? 'border-left:2px solid #28a745;padding-left:4px;' : '';
+            const creditStyle = isInsideCredit ? 'border-left:2px solid #28a745;padding-left:4px;' : '';
+            const topLevelStyle = isTopLevel ? 'border-left:2px solid #8e44ad;padding-left:4px;' : '';
+            const nodeStyle = creditStyle || topLevelStyle;
+            const creditLabel = isInsideCredit ? '<span style="color:#28a745;font-size:10px"> [credit]</span>' : '';
+            const topLevelLabel = isTopLevel ? '<span style="color:#8e44ad;font-size:10px"> [root]</span>' : '';
+            const extraLabel = creditLabel || topLevelLabel;
 
-            const escapedTextPath = textPath.replace(/'/g, "\\'");
-            textEl.innerHTML = `
-                <span class="xml-node-item xml-text" data-path="${textPath}"
-                      ${creditAttr}
-                      style="${creditStyle}color:#0d6efd;cursor:pointer;"
-                      onclick="Mapping.selectXmlNode('${escapedTextPath}', ${textInsideCredit})">
-                    text() <span class="node-type">= "${Mapping._truncate(node.text, 30)}"</span>
-                    ${repeatInfo}
-                    ${textInsideCredit ? '<span style="color:#28a745;font-size:10px"> [credit]</span>' : ''}
+            const escapedPath = cleanPath.replace(/'/g, "\\'");
+            el.innerHTML = `
+                <span class="xml-node-item json-node-item" data-path="${cleanPath}"
+                      style="${nodeStyle}color:#0d6efd;cursor:pointer;"
+                      onclick="Mapping.selectJsonNode('${escapedPath}', ${isInsideCredit}, ${isTopLevel})">
+                    ${node.key}: <span class="node-type">"${Mapping._truncate(node.value || '', 40)}"</span>
+                    ${extraLabel}
                 </span>
             `;
-            container.appendChild(textEl);
+            container.appendChild(el);
+            return;
         }
 
-        // Children — render all leaf repeats (with indexed paths), collapse complex repeats
+        el.appendChild(labelSpan);
+        container.appendChild(el);
+
+        // Render children
         if (node.children) {
-            // Count occurrences of each child tag
-            const tagCounts = {};
-            node.children.forEach(c => {
-                tagCounts[c.tag] = (tagCounts[c.tag] || 0) + 1;
-            });
-
-            const complexSeen = {};
-            const leafCounter = {};
-
             node.children.forEach(child => {
-                const isLeaf = (!child.children || child.children.length === 0);
-                const count = tagCounts[child.tag];
-
-                // Credit block repeat elements: always collapse (existing behavior)
-                if (childInsideCredit && child.tag === creditRepeat) {
-                    if (!complexSeen[child.tag]) {
-                        complexSeen[child.tag] = true;
-                        Mapping._renderXmlTree(child, depth + 1, true, currentFullPath, '');
-                    }
-                }
-                // Complex repeated non-credit elements: collapse to first instance
-                else if (count > 1 && !isLeaf) {
-                    if (!complexSeen[child.tag]) {
-                        complexSeen[child.tag] = true;
-                        Mapping._renderXmlTree(child, depth + 1, childInsideCredit, currentFullPath, currentCreditRelativePath);
-                    }
-                }
-                // Leaf nodes (repeated or not): render every instance with index metadata
-                else {
-                    if (count > 1 && isLeaf) {
-                        leafCounter[child.tag] = (leafCounter[child.tag] || 0);
-                        child._repeatIndex = leafCounter[child.tag];
-                        child._repeatTotal = count;
-                        leafCounter[child.tag]++;
-                    }
-                    Mapping._renderXmlTree(child, depth + 1, childInsideCredit, currentFullPath, currentCreditRelativePath);
-                }
+                Mapping._renderJsonTree(child, depth + 1, childInsideCredit || isParentOfCredit, currentCreditRelativePath, childInsideBatch);
             });
+        }
 
-            // Show count info for collapsed complex blocks
-            for (const [tag, count] of Object.entries(tagCounts)) {
-                if (count > 1 && complexSeen[tag]) {
-                    const infoEl = document.createElement('div');
-                    infoEl.style.paddingLeft = ((depth + 1) * 20) + 'px';
-                    infoEl.innerHTML = `<span style="color:#6c757d;font-size:11px;font-style:italic">
-                        ... ${count - 1} more ${tag} element(s) with same structure
-                    </span>`;
-                    container.appendChild(infoEl);
-                }
-            }
+        // Closing brace
+        if (node.type === 'object' || node.type === 'array') {
+            const closeEl = document.createElement('div');
+            closeEl.style.paddingLeft = (depth * 20) + 'px';
+            closeEl.innerHTML = `<span class="xml-element">${node.type === 'array' ? '' : ''}</span>`;
+            // Don't add closing braces to keep tree compact
         }
     },
 
-    _buildAttrPath(node, attr, depth, insideCredit, fullPath = '', creditRelativePath = '') {
-        // Credit-level attributes: use credit-relative path for nested children
-        if (insideCredit) {
-            if (creditRelativePath) {
-                return `${creditRelativePath}/@${attr}`;
+    /**
+     * Clean a mapping path by removing the root key and batch container prefixes.
+     * e.g., "Payments.BatchDetails.DebitAccounts.DebitAccount.C6021"
+     *    -> "DebitAccounts.DebitAccount.C6021" (relative to batch object)
+     *
+     * The generator places fields relative to the batch object, so we must
+     * strip both the root_key ("Payments") and batch_container ("BatchDetails").
+     */
+    _cleanMappingPath(fullPath, isCredit) {
+        if (isCredit) return fullPath; // Credit paths are already relative
+
+        // Remove root key prefix if tree has single root
+        if (Mapping.jsonTree && Mapping.jsonTree.key !== '(root)') {
+            const rootKey = Mapping.jsonTree.key;
+            if (fullPath.startsWith(rootKey + '.')) {
+                fullPath = fullPath.substring(rootKey.length + 1);
             }
-            return `@${attr}`;
-        }
-        // Use the full ancestor path for correct element nesting
-        if (fullPath) {
-            // Append index for repeated leaf siblings so attribute paths are unique
-            // (e.g., Transform[0]/@Algorithm vs Transform[1]/@Algorithm)
-            if (node._repeatIndex !== undefined) {
-                fullPath = `${fullPath}[${node._repeatIndex}]`;
+
+            // Strip batch container prefix (e.g., "BatchDetails.")
+            // The batch container is the array that holds transaction batches.
+            const batchContainer = Mapping._getBatchContainer();
+            if (batchContainer && fullPath.startsWith(batchContainer + '.')) {
+                fullPath = fullPath.substring(batchContainer.length + 1);
             }
-            return `${fullPath}/@${attr}`;
         }
-        // Fallback for root element (fullPath is empty at depth 0)
-        return `${node.tag}/@${attr}`;
+
+        return fullPath;
     },
 
-    _getXmlTreeValue(path) {
-        // Extract value from uploaded XML tree at a given path.
-        // Supports: "Element/@Attr", "Element/Child", "@Attr", "Element/Child[0]"
-        if (!Mapping.xmlTree || !path) return '';
+    /**
+     * Get the current batch container name — from the dropdown or auto-detect.
+     */
+    _getBatchContainer() {
+        const select = document.getElementById('batchContainerSelect');
+        if (select && select.value) return select.value;
+        return Mapping._detectBatchContainer();
+    },
 
-        const parts = path.replace(/\[\d+\]/g, '').split('/');
-        let node = Mapping.xmlTree;
-
-        // Skip root element if path starts with it
-        let startIdx = 0;
-        if (parts[0] === node.tag) startIdx = 1;
-
-        for (let i = startIdx; i < parts.length; i++) {
-            const part = parts[i];
-            if (part.startsWith('@')) {
-                // Attribute on current node
-                return (node.attributes && node.attributes[part.slice(1)]) || '';
-            }
-            // Navigate to child element
-            const child = (node.children || []).find(c => c.tag === part);
-            if (!child) return '';
-            node = child;
+    /**
+     * Auto-detect batch container: the first array child of the root object.
+     */
+    _detectBatchContainer() {
+        if (Mapping.jsonTree && Mapping.jsonTree.children) {
+            const arrayChild = Mapping.jsonTree.children.find(c => c.type === 'array');
+            if (arrayChild) return arrayChild.key;
         }
-        // Reached a text element
-        return node.text || '';
+        return '';
+    },
+
+    _getJsonTreeValue(path) {
+        if (!Mapping.jsonTree || !path) return '';
+
+        // Try to find the node by searching the tree
+        const node = Mapping._findNodeByPath(Mapping.jsonTree, path);
+        if (node && node.value !== undefined) return node.value;
+
+        // Try with root key prefix
+        if (Mapping.jsonTree.key !== '(root)') {
+            const fullPath = `${Mapping.jsonTree.key}.${path}`;
+            const node2 = Mapping._findNodeByPath(Mapping.jsonTree, fullPath);
+            if (node2 && node2.value !== undefined) return node2.value;
+        }
+
+        return '';
     },
 
     _populatePathSelects() {
-        const paths = Mapping.allXmlPaths;
+        const paths = Mapping.allJsonPaths;
         ['batchRefSelect', 'creditRefSelect', 'debitStatusSelect', 'creditStatusSelect'].forEach(id => {
             const sel = document.getElementById(id);
             const current = sel.value;
@@ -906,33 +941,51 @@ const Mapping = {
     },
 
     _loadExistingConfig() {
-        const type = Mapping.currentXmlType;
+        const type = Mapping.currentJsonType;
         const config = Mapping.mappingConfig[type] || {};
 
-        // Load credit block config into hidden inputs (supports both credit_block and repeating_blocks)
+        // Load credit block config
         const primaryBlock = (config.repeating_blocks || []).find(b => b.name === 'credits') || {};
         const cb = config.credit_block || primaryBlock;
         document.getElementById('creditParentPath').value = cb.parent_path || '';
         document.getElementById('creditRepeatElement').value = cb.repeat_element || '';
 
-        // Reset the dropdown — it will be re-populated when XML is uploaded
         const select = document.getElementById('creditBlockSelect');
         if (cb.parent_path && cb.repeat_element) {
-            // If we have existing config but no tree yet, show it in dropdown
-            const label = `${cb.parent_path} / ${cb.repeat_element} (saved)`;
+            const label = `${cb.parent_path}.${cb.repeat_element} (saved)`;
             const value = JSON.stringify({ parent_path: cb.parent_path, repeat_element: cb.repeat_element });
-            select.innerHTML = `<option value="">-- Upload XML to detect --</option>
+            select.innerHTML = `<option value="">-- Upload JSON to detect --</option>
                 <option value='${value}' selected>${label}</option>`;
-            // Build credit node paths from existing config
             Mapping.creditNodePaths = new Set();
-            if (Mapping.xmlTree) {
+            if (Mapping.jsonTree) {
                 Mapping._buildCreditNodePaths(cb.parent_path, cb.repeat_element);
             }
         } else {
-            select.innerHTML = '<option value="">-- Upload XML to detect --</option>';
+            select.innerHTML = '<option value="">-- Upload JSON to detect --</option>';
         }
 
-        // Load filename pattern from scheme-level data (request only)
+        // Load multi-batch flag and batch container (request only)
+        if (type === 'request') {
+            document.getElementById('isMultiBatch').checked = config.is_multi_batch || false;
+
+            const batchContainerSelect = document.getElementById('batchContainerSelect');
+            if (config.batch_container) {
+                // Ensure option exists in dropdown
+                let found = false;
+                for (const opt of batchContainerSelect.options) {
+                    if (opt.value === config.batch_container) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    batchContainerSelect.innerHTML += `<option value="${config.batch_container}">${config.batch_container} (saved)</option>`;
+                }
+                batchContainerSelect.value = config.batch_container;
+            }
+        }
+
+        // Load filename pattern (request only)
         if (type === 'request') {
             const fp = Mapping.filenamePattern || {};
             document.getElementById('filenamePrefix').value = fp.prefix || '';
@@ -944,22 +997,21 @@ const Mapping = {
         document.getElementById('creditRefSelect').value = config.credit_reference_field || '';
 
         if (type !== 'request') {
-            // Load success indicator tag for response type
-            if (type === 'response' && Mapping.isResponseXmlSplit) {
-                document.getElementById('successIndicatorTag').value = config.success_indicator_tag || '';
-                console.log('[Mapping] Loaded success_indicator_tag:', config.success_indicator_tag || '');
+            // Load success indicator for response type
+            if (type === 'response' && Mapping.isResponseSplit) {
+                document.getElementById('successIndicatorPath').value = config.success_indicator_path || '';
+                document.getElementById('successIndicatorValue').value = config.success_indicator_value || '';
             }
 
             document.getElementById('debitStatusSelect').value = config.debit_status_field || '';
             document.getElementById('creditStatusSelect').value = config.credit_status_field || '';
 
-            // Separate debit and credit status values
-            const dsv = config.debit_status_values || config.status_values || {};
+            const dsv = config.debit_status_values || {};
             document.getElementById('debitSuccessCodes').value = (dsv.success || []).join(',');
             document.getElementById('debitFailureCodes').value = (dsv.failure || []).join(',');
             document.getElementById('debitPendingCodes').value = (dsv.pending || []).join(',');
 
-            const csv = config.credit_status_values || config.status_values || {};
+            const csv = config.credit_status_values || {};
             document.getElementById('creditSuccessCodes').value = (csv.success || []).join(',');
             document.getElementById('creditFailureCodes').value = (csv.failure || []).join(',');
             document.getElementById('creditPendingCodes').value = (csv.pending || []).join(',');
@@ -971,8 +1023,7 @@ const Mapping = {
     async saveMappingConfig() {
         if (!Mapping.currentSchemeId) return;
 
-        // Collect special fields for current xml type
-        const type = Mapping.currentXmlType;
+        const type = Mapping.currentJsonType;
         if (!Mapping.mappingConfig[type]) {
             Mapping.mappingConfig[type] = {};
         }
@@ -983,7 +1034,7 @@ const Mapping = {
         config.batch_reference_field = document.getElementById('batchRefSelect').value;
         config.credit_reference_field = document.getElementById('creditRefSelect').value;
 
-        // Filename pattern — saved as top-level key (stored in schemes.filename_pattern column)
+        // Filename pattern (request only)
         if (type === 'request') {
             Mapping.mappingConfig.filename_pattern = {
                 prefix: document.getElementById('filenamePrefix').value.trim(),
@@ -991,36 +1042,62 @@ const Mapping = {
             };
         }
 
-        // Credit block config (maintain both credit_block for backward compat and repeating_blocks)
+        // Credit block config
         if (!config.credit_block) config.credit_block = { fields: [] };
         config.credit_block.parent_path = document.getElementById('creditParentPath').value;
         config.credit_block.repeat_element = document.getElementById('creditRepeatElement').value;
 
-        // Build repeating_blocks array from credit_block + any additional blocks
-        const primaryBlock = {
-            name: 'credits',
-            parent_path: config.credit_block.parent_path,
-            repeat_element: config.credit_block.repeat_element,
-            fields: config.credit_block.fields || []
-        };
-        // Start with primary credit block, add additional blocks if configured
-        const additionalBlocks = (config.repeating_blocks || []).filter(b => b.name !== 'credits');
-        config.repeating_blocks = [primaryBlock, ...additionalBlocks].filter(b => b.parent_path && b.repeat_element);
-
-        // Auto-derive debit_element from credit block parent path
-        const parentPath = config.credit_block.parent_path || '';
-        if (parentPath) {
-            const firstPart = parentPath.split('/').find(p => p && p !== (Mapping.xmlTree?.tag || ''));
-            if (firstPart) {
-                config.debit_element = firstPart;
-                console.log('[Mapping] Auto-derived debit_element:', firstPart);
+        // Build repeating_blocks array — strip root_key and batch_container from parent_path
+        // so the backend gets paths relative to the batch object.
+        let creditParentPath = config.credit_block.parent_path || '';
+        {
+            const rootKey = config.root_key || (Mapping.jsonTree ? Mapping.jsonTree.key : '');
+            const batchContainer = config.batch_container || Mapping._getBatchContainer();
+            const fullPrefix = [rootKey, batchContainer].filter(Boolean).join('.');
+            if (fullPrefix && creditParentPath.startsWith(fullPrefix + '.')) {
+                creditParentPath = creditParentPath.substring(fullPrefix.length + 1);
+            } else if (fullPrefix && creditParentPath === fullPrefix) {
+                creditParentPath = '';
             }
         }
 
-        // Success indicator tag (response only, when split response is enabled)
-        if (type === 'response' && Mapping.isResponseXmlSplit) {
-            config.success_indicator_tag = document.getElementById('successIndicatorTag').value.trim();
-            console.log('[Mapping] Saving success_indicator_tag:', config.success_indicator_tag);
+        const primaryBlock = {
+            name: 'credits',
+            parent_path: creditParentPath,
+            repeat_element: config.credit_block.repeat_element,
+            fields: config.credit_block.fields || []
+        };
+        const additionalBlocks = (config.repeating_blocks || []).filter(b => b.name !== 'credits');
+        config.repeating_blocks = [primaryBlock, ...additionalBlocks].filter(b => b.repeat_element);
+
+        // Multi-batch flag and batch container (request only)
+        if (type === 'request') {
+            config.is_multi_batch = document.getElementById('isMultiBatch').checked;
+
+            // Batch container: use dropdown selection, or auto-detect
+            const batchContainerSelect = document.getElementById('batchContainerSelect');
+            if (batchContainerSelect.value) {
+                config.batch_container = batchContainerSelect.value;
+            }
+        }
+
+        // Root key from tree
+        if (Mapping.jsonTree) {
+            config.root_key = Mapping.jsonTree.key !== '(root)' ? Mapping.jsonTree.key : '';
+
+            // Auto-detect batch container if not explicitly set
+            if (!config.batch_container && Mapping.jsonTree.children) {
+                const arrayChild = Mapping.jsonTree.children.find(c => c.type === 'array');
+                if (arrayChild) {
+                    config.batch_container = arrayChild.key;
+                }
+            }
+        }
+
+        // Success indicator (response only, when split is enabled)
+        if (type === 'response' && Mapping.isResponseSplit) {
+            config.success_indicator_path = document.getElementById('successIndicatorPath').value.trim();
+            config.success_indicator_value = document.getElementById('successIndicatorValue').value.trim();
         }
 
         // Status fields (initiation/response/response_fail only)
@@ -1038,11 +1115,6 @@ const Mapping = {
                 failure: Mapping._parseCodes('creditFailureCodes'),
                 pending: Mapping._parseCodes('creditPendingCodes')
             };
-        }
-
-        // Root element from tree
-        if (Mapping.xmlTree) {
-            config.root_element = Mapping.xmlTree.tag;
         }
 
         console.log('[Mapping] Saving config:', JSON.stringify(Mapping.mappingConfig, null, 2));

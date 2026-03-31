@@ -6,7 +6,7 @@ from flask import Blueprint, jsonify, send_file
 from backend import models
 from backend.config import REPORT_DIR
 from backend.services.validator import validate_transaction
-from backend.services.xml_parser import parse_xml_file
+from backend.services.json_parser import parse_json_file
 from backend.services.report_generator import generate_report
 
 logger = logging.getLogger(__name__)
@@ -57,10 +57,10 @@ def validate_run(run_id):
                 logger.debug("Loaded stored initiation data for tc_id=%s", txn["tc_id"])
             elif txn.get("initiation_xml_path") and os.path.isfile(txn["initiation_xml_path"]):
                 # Fallback: re-parse if stored data not available
-                initiation_data = parse_xml_file(
+                initiation_data = parse_json_file(
                     txn["initiation_xml_path"], "initiation", mapping_config
                 )
-                logger.debug("Parsed initiation XML for tc_id=%s (fallback)", txn["tc_id"])
+                logger.debug("Parsed initiation JSON for tc_id=%s (fallback)", txn["tc_id"])
 
             # Read stored parsed data from response processing
             response_data = None
@@ -73,10 +73,10 @@ def validate_run(run_id):
                 logger.debug("Loaded stored response data for tc_id=%s", txn["tc_id"])
             elif txn.get("response_xml_path") and os.path.isfile(txn["response_xml_path"]):
                 # Fallback: re-parse if stored data not available
-                response_data = parse_xml_file(
+                response_data = parse_json_file(
                     txn["response_xml_path"], "response", mapping_config
                 )
-                logger.debug("Parsed response XML for tc_id=%s (fallback)", txn["tc_id"])
+                logger.debug("Parsed response JSON for tc_id=%s (fallback)", txn["tc_id"])
 
             # Read stored parsed data from failure response processing (split mode)
             response_fail_data = None
@@ -95,7 +95,7 @@ def validate_run(run_id):
                                "— skipping validation", txn["tc_id"])
                 errors.append({
                     "tc_id": txn["tc_id"],
-                    "error": "No initiation or response XML available"
+                    "error": "No initiation or response JSON available"
                 })
                 continue
 

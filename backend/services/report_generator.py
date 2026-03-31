@@ -72,7 +72,7 @@ def _build_summary_sheet(ws, test_run, transactions):
     ws.column_dimensions["B"].width = 40
 
     # Title
-    ws.append(["XML Payment Test Automation - Validation Report"])
+    ws.append(["JSON Payment Test Automation - Validation Report"])
     ws["A1"].font = Font(bold=True, size=14)
     ws.merge_cells("A1:B1")
     ws.append([])

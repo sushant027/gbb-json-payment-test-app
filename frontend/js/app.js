@@ -35,8 +35,8 @@ const App = {
             case 'upload':
                 App.loadTestRuns();
                 break;
-            case 'xml-gen':
-                XmlGen.loadTestRuns();
+            case 'json-gen':
+                JsonGen.loadTestRuns();
                 break;
             case 'processing':
                 Processing.loadTestRuns();

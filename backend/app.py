@@ -34,13 +34,13 @@ def create_app():
     # Register blueprints
     from backend.routes.schemes import schemes_bp
     from backend.routes.test_runs import test_runs_bp
-    from backend.routes.xml_gen import xml_gen_bp
+    from backend.routes.json_gen import json_gen_bp
     from backend.routes.processing import processing_bp
     from backend.routes.results import results_bp
 
     app.register_blueprint(schemes_bp, url_prefix="/api/schemes")
     app.register_blueprint(test_runs_bp, url_prefix="/api/test-runs")
-    app.register_blueprint(xml_gen_bp, url_prefix="/api/xml")
+    app.register_blueprint(json_gen_bp, url_prefix="/api/json")
     app.register_blueprint(processing_bp, url_prefix="/api/processing")
     app.register_blueprint(results_bp, url_prefix="/api/results")
 
